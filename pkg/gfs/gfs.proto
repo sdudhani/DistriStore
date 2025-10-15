@@ -1,0 +1,21 @@
+//pkg/gfs/gfs.proto
+
+syntax = "proto3";
+
+package gfs;
+
+option go_package = "github.com/sdudhani/godfs/pkg/gfs";
+
+//Master Service Definition
+service Master {
+    rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse){}
+}
+
+message HeartbeatRequest{
+    string chunkserver_id = 1;
+} 
+
+message HeartbeatResponse{
+    string message = 1;
+}
+
