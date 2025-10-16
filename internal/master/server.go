@@ -12,9 +12,9 @@ type Server struct {
 	gfs.UnimplementedMasterServer
 }
 
-func (s *Server) Hearbeat(ctx context.Context, req *gfs.HearbeatRequest) (*gfs.HeartbeatResponse, error) {
-	chunkserverID := req.GetChunkserverID()
-	log.Printf("Recieved heartbeat from :%s", chunkserverID)
+func (s *Server) Heartbeat(ctx context.Context, req *gfs.HeartbeatRequest) (*gfs.HeartbeatResponse, error) {
+	chunkserverID := req.GetChunkserverId()
+	log.Printf("Received heartbeat from :%s", chunkserverID)
 
-	return &gfs.HeartbeatResponse{Message: "Hearbet recieved"}, nil
+	return &gfs.HeartbeatResponse{Message: "Heartbeat received"}, nil
 }
