@@ -9,6 +9,96 @@ option go_package = "github.com/sdudhani/godfs/pkg/gfs";
 //Master Service Definition
 service Master {
     rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse){}
+    rpc UploadFile(UploadFileRequest) returns (UploadFileResponse);
+    rpc DownloadFile(DownloadFileRequest) returns (DownloadFileResponse);
+    rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
+    rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+    rpc GetChunkLocations(GetChunkLocationsRequest) returns (GetChunkLocationsResponse);
+}
+
+service Chunkserver {
+    rpc StoreChunk(StoreChunkRequest) returns (StoreChunkResponse);
+    rpc RetrieveChunk(RetrieveChunkRequest) returns (RetrieveChunkResponse);
+    rpc DeleteChunk(DeleteChunkRequest) returns (DeleteChunkResponse);
+}
+
+//Chunkserver messages
+
+message StoreChunkRequest {
+    string chunk_handle = 1;
+    bytes data = 2;
+}
+
+message StoreChunkResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message RetrieveChunkRequest {
+    string chunk_handle = 1;
+}
+
+message RetrieveChunkResponse {
+    bool success = 1;
+    bytes data = 2;
+    string message = 3;
+}
+
+message DeleteChunkRequest {
+    string chunk_handle = 1;
+}
+
+message DeleteChunkResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message UploadFileRequest{
+    string filename = 1;
+    bytes data = 2;
+}
+
+message UploadFileResponse{
+    bool success = 1;
+    string message = 2;
+}
+
+message DownloadFileRequest{
+    string filename = 1;
+}
+
+message DownloadFileResponse{
+    bool success = 1;
+    bytes data = 2;
+    string message = 3;
+}
+
+message ListFilesRequest{
+    string path = 1;
+}
+
+message ListFilesResponse{
+    bool success = 1;
+    repeated string files = 2;
+    string message = 3;
+}
+message DeleteFileRequest {
+    string filename = 1;
+}
+
+message DeleteFileResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message GetChunkLocationsRequest {
+    string filename = 1;
+    int32 chunk_index = 2;
+}
+
+message GetChunkLocationsResponse {
+    repeated string chunkserver_addresses = 1;
+    string chunk_handle = 2;
 }
 
 message HeartbeatRequest{
