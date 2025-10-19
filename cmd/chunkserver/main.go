@@ -31,7 +31,7 @@ func main() {
 	DataDir := filepath.Join(homeDir, ".godfs", "chunkserver_data")
 
 	// Create chunkserver with data directory
-	chunkserverServer := chunkserver.NewServer("./chunkserver_data")
+	chunkserverServer := chunkserver.NewServer(DataDir)
 
 	// Register the chunkserver service
 	gfs.RegisterChunkserverServer(grpcServer, chunkserverServer)

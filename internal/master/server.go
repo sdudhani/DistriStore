@@ -31,18 +31,19 @@ type Server struct {
 
 // NewServer creates a new master server
 func NewServer() *Server {
-	// For now, we'll connect to localhost:9001
-	// Later we can make this configurable
-	conn, err := grpc.Dial("localhost:9001", grpc.WithInsecure())
-	if err != nil {
-		log.Fatalf("Failed to connect to chunkserver: %v", err)
-	}
-
 	return &Server{
-		fileMetadata:      make(map[string]*FileMetadata),
-		chunkLocations:    make(map[string][]string),
-		chunkserverClient: gfs.NewChunkserverClient(conn),
+		fileMetadata:   make(map[string]*FileMetadata),
+		chunkLocations: make(map[string][]string),
 	}
+}
+
+// getChunkserverClient creates a connection to the chunkserver
+func (s *Server) getChunkserverClient() (gfs.ChunkserverClient, error) {
+	conn, err := grpc.NewClient("localhost:9001", grpc.WithInsecure())
+	if err != nil {
+		return nil, err
+	}
+	return gfs.NewChunkserverClient(conn), nil
 }
 
 // Heartbeat handles chunkserver heartbeats
@@ -67,13 +68,23 @@ func (s *Server) UploadFile(ctx context.Context, req *gfs.UploadFileRequest) (*g
 	// Generate a chunk handle for this file
 	chunkHandle := fmt.Sprintf("%s-0", filename)
 
+	// Get chunkserver client
+	chunkserverClient, err := s.getChunkserverClient()
+	if err != nil {
+		log.Printf("Failed to connect to chunkserver: %v", err)
+		return &gfs.UploadFileResponse{
+			Success: false,
+			Message: fmt.Sprintf("Failed to connect to chunkserver: %v", err),
+		}, nil
+	}
+
 	// Store the chunk on chunkserver
 	storeReq := &gfs.StoreChunkRequest{
 		ChunkHandle: chunkHandle,
 		Data:        data,
 	}
 
-	_, err := s.chunkserverClient.StoreChunk(ctx, storeReq)
+	_, err = chunkserverClient.StoreChunk(ctx, storeReq)
 	if err != nil {
 		log.Printf("Failed to store chunk %s: %v", chunkHandle, err)
 		return &gfs.UploadFileResponse{
@@ -126,12 +137,23 @@ func (s *Server) DownloadFile(ctx context.Context, req *gfs.DownloadFileRequest)
 
 	chunkHandle := fileMeta.ChunkHandles[0]
 
+	// Get chunkserver client
+	chunkserverClient, err := s.getChunkserverClient()
+	if err != nil {
+		log.Printf("Failed to connect to chunkserver: %v", err)
+		return &gfs.DownloadFileResponse{
+			Success: false,
+			Data:    nil,
+			Message: fmt.Sprintf("Failed to connect to chunkserver: %v", err),
+		}, nil
+	}
+
 	// Retrieve chunk from chunkserver
 	retrieveReq := &gfs.RetrieveChunkRequest{
 		ChunkHandle: chunkHandle,
 	}
 
-	resp, err := s.chunkserverClient.RetrieveChunk(ctx, retrieveReq)
+	resp, err := chunkserverClient.RetrieveChunk(ctx, retrieveReq)
 	if err != nil {
 		log.Printf("Failed to retrieve chunk %s: %v", chunkHandle, err)
 		return &gfs.DownloadFileResponse{
@@ -195,13 +217,23 @@ func (s *Server) DeleteFile(ctx context.Context, req *gfs.DeleteFileRequest) (*g
 		}, nil
 	}
 
+	// Get chunkserver client
+	chunkserverClient, err := s.getChunkserverClient()
+	if err != nil {
+		log.Printf("Failed to connect to chunkserver: %v", err)
+		return &gfs.DeleteFileResponse{
+			Success: false,
+			Message: fmt.Sprintf("Failed to connect to chunkserver: %v", err),
+		}, nil
+	}
+
 	// Delete chunks from chunkserver
 	for _, chunkHandle := range fileMeta.ChunkHandles {
 		deleteReq := &gfs.DeleteChunkRequest{
 			ChunkHandle: chunkHandle,
 		}
 
-		_, err := s.chunkserverClient.DeleteChunk(ctx, deleteReq)
+		_, err := chunkserverClient.DeleteChunk(ctx, deleteReq)
 		if err != nil {
 			log.Printf("Failed to delete chunk %s: %v", chunkHandle, err)
 		}
