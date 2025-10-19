@@ -7,6 +7,7 @@ import (
 	"github.com/sdudhani/godfs/internal/chunkserver"
 	"github.com/sdudhani/godfs/pkg/gfs"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 func main() {
@@ -23,6 +24,9 @@ func main() {
 
 	// Register the chunkserver service
 	gfs.RegisterChunkserverServer(grpcServer, chunkserverServer)
+
+	// Enable gRPC reflection for grpcurl
+	reflection.Register(grpcServer)
 
 	log.Println("Chunkserver listening on port 9001")
 
