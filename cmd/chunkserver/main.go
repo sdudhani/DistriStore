@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"net"
+	"os"
+	"path/filepath"
 
 	"github.com/sdudhani/godfs/internal/chunkserver"
 	"github.com/sdudhani/godfs/pkg/gfs"
@@ -18,6 +20,15 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer()
+
+	//Creating Data directory in the home directory
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatalf("Failed to get home directory: %v", err)
+	}
+
+	//Created the Datadir filepath
+	DataDir := filepath.Join(homeDir, ".godfs", "chunkserver_data")
 
 	// Create chunkserver with data directory
 	chunkserverServer := chunkserver.NewServer("./chunkserver_data")
