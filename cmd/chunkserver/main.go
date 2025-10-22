@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net"
 	"os"
@@ -13,33 +14,36 @@ import (
 )
 
 func main() {
-	// Chunkserver listens on port 9001
-	lis, err := net.Listen("tcp", ":9001")
+	// Command line flags for the chunkservers
+	port := flag.String("port", "9001", "Port to listen on")
+	dataDir := flag.String("data-dir", "./chunkserver_data", "Data directory for chunks")
+	flag.Parse()
+
+	// Created data directory
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatalf("Failed to get home directory: %v", err)
+	}
+
+	fullDataDir := filepath.Join(homeDir, ".godfs", *dataDir)
+
+	lis, err := net.Listen("tcp", ":"+*port)
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
 	}
 
 	grpcServer := grpc.NewServer()
 
-	//Creating Data directory in the home directory
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		log.Fatalf("Failed to get home directory: %v", err)
-	}
-
-	//Created the Datadir filepath
-	DataDir := filepath.Join(homeDir, ".godfs", "chunkserver_data")
-
 	// Create chunkserver with data directory
-	chunkserverServer := chunkserver.NewServer(DataDir)
+	chunkserverServer := chunkserver.NewServer(fullDataDir)
 
-	// Register the chunkserver service
+	// Register chunkserver service
 	gfs.RegisterChunkserverServer(grpcServer, chunkserverServer)
 
-	// Enable gRPC reflection for grpcurl
+	// Enable grpc reflection
 	reflection.Register(grpcServer)
 
-	log.Println("Chunkserver listening on port 9001")
+	log.Println("Chunkserver listening on port %s, data director: %s", *port, fullDataDir)
 
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)

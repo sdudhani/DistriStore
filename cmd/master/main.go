@@ -19,7 +19,7 @@ func main() {
 
 	grpcServer := grpc.NewServer()
 
-	masterServer := &master.Server{}
+	masterServer := master.NewServer()
 
 	gfs.RegisterMasterServer(grpcServer, masterServer)
 

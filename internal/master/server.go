@@ -39,7 +39,7 @@ func NewServer() *Server {
 
 // getChunkserverClient creates a connection to the chunkserver
 func (s *Server) getChunkserverClient() (gfs.ChunkserverClient, error) {
-	conn, err := grpc.NewClient("localhost:9001", grpc.WithInsecure())
+	conn, err := grpc.Dial("localhost:9001", grpc.WithInsecure())
 	if err != nil {
 		return nil, err
 	}
