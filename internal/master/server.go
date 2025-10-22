@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/sdudhani/godfs/pkg/gfs"
 	"google.golang.org/grpc"
@@ -16,6 +17,12 @@ type FileMetadata struct {
 	Size         int64
 }
 
+type ChunkserverInfo struct {
+	Address   string
+	LastSeen  int64
+	IsHealthy bool
+}
+
 // Server implements the gRPC Master server
 type Server struct {
 	gfs.UnimplementedMasterServer
@@ -25,8 +32,8 @@ type Server struct {
 	fileMetadata   map[string]*FileMetadata // filename -> metadata
 	chunkLocations map[string][]string      // chunkHandle -> chunkserver addresses
 
-	// Chunkserver client for communication
-	chunkserverClient gfs.ChunkserverClient
+	// Chunserver management
+	chunkservers map[string]*ChunkserverInfo
 }
 
 // NewServer creates a new master server
@@ -34,12 +41,13 @@ func NewServer() *Server {
 	return &Server{
 		fileMetadata:   make(map[string]*FileMetadata),
 		chunkLocations: make(map[string][]string),
+		chunkservers:   make(map[string]*ChunkserverInfo),
 	}
 }
 
 // getChunkserverClient creates a connection to the chunkserver
-func (s *Server) getChunkserverClient() (gfs.ChunkserverClient, error) {
-	conn, err := grpc.Dial("localhost:9001", grpc.WithInsecure())
+func (s *Server) getChunkserverClient(address string) (gfs.ChunkserverClient, error) {
+	conn, err := grpc.Dial(address, grpc.WithInsecure())
 	if err != nil {
 		return nil, err
 	}
@@ -49,12 +57,34 @@ func (s *Server) getChunkserverClient() (gfs.ChunkserverClient, error) {
 // Heartbeat handles chunkserver heartbeats
 func (s *Server) Heartbeat(ctx context.Context, req *gfs.HeartbeatRequest) (*gfs.HeartbeatResponse, error) {
 	chunkserverID := req.GetChunkserverId()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.chunkservers[chunkserverID] = &ChunkserverInfo{
+		Address:   chunkserverID,
+		LastSeen:  time.Now().Unix(),
+		IsHealthy: true,
+	}
+
 	log.Printf("Received heartbeat from: %s", chunkserverID)
-
-	// TODO: Update chunkserver status and locations
-	// For now, just acknowledge the heartbeat
-
 	return &gfs.HeartbeatResponse{Message: "Heartbeat received"}, nil
+}
+
+func (s *Server) getAvailableChunkservers() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var available []string
+	for address, info := range s.chunkservers {
+		if info.IsHealthy {
+			available = append(available, address)
+		}
+	}
+	if len(available) == 0 {
+		available = []string{"localhost:9001", "localhost:9001", "localhost:9003"}
+	}
+	return available
 }
 
 // UploadFile handles file uploads
@@ -68,6 +98,42 @@ func (s *Server) UploadFile(ctx context.Context, req *gfs.UploadFileRequest) (*g
 	// Generate a chunk handle for this file
 	chunkHandle := fmt.Sprintf("%s-0", filename)
 
+	// Get the available chunkservers
+	availableChunkserers := s.getAvailableChunkservers()
+
+	// Replicated chunk to multiple chunkservers (3 replicas)
+	replicaCount := 3
+	if len(availableChunkserers) < replicaCount {
+		replicaCount = len(availableChunkserers)
+	}
+
+	var successfulReplicas []string
+
+	for i := 0; i < replicaCount; i++ {
+		chunkserverAddr := availableChunkserers[i]
+
+		//Get chunkserver client
+		chunkserverClient, err := s.getChunkserverClient(chunkserverAddr)
+		if err != nil {
+			log.Printf("Failed to connect to chunkserver %s: %v", chunkserverAddr, err)
+			continue
+		}
+
+		//Storing the chunk on chunkserver
+		storeReq := &gfs.StoreChunkRequest{
+			ChunkHandle: chunkHandle,
+			Data:        data,
+		}
+
+		_, err = chunkserverClient.StoreChunk(ctx, storeReq)
+		if err != nil {
+			log.Printf("Failed to store chunk %s on %s: %v", chunkHandle, chunkserverAddr, err)
+			continue
+		}
+
+		successfulReplicas = append(successfulReplicas, chunkserverAddr)
+		log.Printf("Stored chunk %s on %s", chunkHandle, chunkserverAddr)
+	}
 	// Get chunkserver client
 	chunkserverClient, err := s.getChunkserverClient()
 	if err != nil {
