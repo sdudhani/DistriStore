@@ -17,6 +17,7 @@ type FileMetadata struct {
 	Size         int64
 }
 
+// ChunkserverInfo represents information about a chunkserver
 type ChunkserverInfo struct {
 	Address   string
 	LastSeen  int64
@@ -32,8 +33,8 @@ type Server struct {
 	fileMetadata   map[string]*FileMetadata // filename -> metadata
 	chunkLocations map[string][]string      // chunkHandle -> chunkserver addresses
 
-	// Chunserver management
-	chunkservers map[string]*ChunkserverInfo
+	// Chunkserver management
+	chunkservers map[string]*ChunkserverInfo // address -> info
 }
 
 // NewServer creates a new master server
@@ -61,6 +62,9 @@ func (s *Server) Heartbeat(ctx context.Context, req *gfs.HeartbeatRequest) (*gfs
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Register or update chunkserver info
+	// For now, we'll assume the chunkserverID is the address
+	// In a real system, you'd have a mapping from ID to address
 	s.chunkservers[chunkserverID] = &ChunkserverInfo{
 		Address:   chunkserverID,
 		LastSeen:  time.Now().Unix(),
@@ -68,9 +72,11 @@ func (s *Server) Heartbeat(ctx context.Context, req *gfs.HeartbeatRequest) (*gfs
 	}
 
 	log.Printf("Received heartbeat from: %s", chunkserverID)
+
 	return &gfs.HeartbeatResponse{Message: "Heartbeat received"}, nil
 }
 
+// getAvailableChunkservers returns a list of healthy chunkservers
 func (s *Server) getAvailableChunkservers() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -81,13 +87,16 @@ func (s *Server) getAvailableChunkservers() []string {
 			available = append(available, address)
 		}
 	}
+
+	// If no chunkservers are registered, use default ones
 	if len(available) == 0 {
-		available = []string{"localhost:9001", "localhost:9001", "localhost:9003"}
+		available = []string{"localhost:9001", "localhost:9002", "localhost:9003"}
 	}
+
 	return available
 }
 
-// UploadFile handles file uploads
+// UploadFile handles file uploads with replication
 func (s *Server) UploadFile(ctx context.Context, req *gfs.UploadFileRequest) (*gfs.UploadFileResponse, error) {
 	filename := req.GetFilename()
 	data := req.GetData()
@@ -98,28 +107,28 @@ func (s *Server) UploadFile(ctx context.Context, req *gfs.UploadFileRequest) (*g
 	// Generate a chunk handle for this file
 	chunkHandle := fmt.Sprintf("%s-0", filename)
 
-	// Get the available chunkservers
-	availableChunkserers := s.getAvailableChunkservers()
+	// Get available chunkservers
+	availableChunkservers := s.getAvailableChunkservers()
 
-	// Replicated chunk to multiple chunkservers (3 replicas)
+	// Replicate chunk to multiple chunkservers (3 replicas)
 	replicaCount := 3
-	if len(availableChunkserers) < replicaCount {
-		replicaCount = len(availableChunkserers)
+	if len(availableChunkservers) < replicaCount {
+		replicaCount = len(availableChunkservers)
 	}
 
 	var successfulReplicas []string
 
 	for i := 0; i < replicaCount; i++ {
-		chunkserverAddr := availableChunkserers[i]
+		chunkserverAddr := availableChunkservers[i]
 
-		//Get chunkserver client
+		// Get chunkserver client
 		chunkserverClient, err := s.getChunkserverClient(chunkserverAddr)
 		if err != nil {
 			log.Printf("Failed to connect to chunkserver %s: %v", chunkserverAddr, err)
 			continue
 		}
 
-		//Storing the chunk on chunkserver
+		// Store the chunk on chunkserver
 		storeReq := &gfs.StoreChunkRequest{
 			ChunkHandle: chunkHandle,
 			Data:        data,
@@ -134,28 +143,11 @@ func (s *Server) UploadFile(ctx context.Context, req *gfs.UploadFileRequest) (*g
 		successfulReplicas = append(successfulReplicas, chunkserverAddr)
 		log.Printf("Stored chunk %s on %s", chunkHandle, chunkserverAddr)
 	}
-	// Get chunkserver client
-	chunkserverClient, err := s.getChunkserverClient()
-	if err != nil {
-		log.Printf("Failed to connect to chunkserver: %v", err)
+
+	if len(successfulReplicas) == 0 {
 		return &gfs.UploadFileResponse{
 			Success: false,
-			Message: fmt.Sprintf("Failed to connect to chunkserver: %v", err),
-		}, nil
-	}
-
-	// Store the chunk on chunkserver
-	storeReq := &gfs.StoreChunkRequest{
-		ChunkHandle: chunkHandle,
-		Data:        data,
-	}
-
-	_, err = chunkserverClient.StoreChunk(ctx, storeReq)
-	if err != nil {
-		log.Printf("Failed to store chunk %s: %v", chunkHandle, err)
-		return &gfs.UploadFileResponse{
-			Success: false,
-			Message: fmt.Sprintf("Failed to store chunk: %v", err),
+			Message: "Failed to store chunk on any chunkserver",
 		}, nil
 	}
 
@@ -165,14 +157,15 @@ func (s *Server) UploadFile(ctx context.Context, req *gfs.UploadFileRequest) (*g
 		Size:         int64(len(data)),
 	}
 
-	// Record chunk location
-	s.chunkLocations[chunkHandle] = []string{"localhost:9001"}
+	// Record chunk locations
+	s.chunkLocations[chunkHandle] = successfulReplicas
 
-	log.Printf("Uploaded file %s (%d bytes) as chunk %s", filename, len(data), chunkHandle)
+	log.Printf("Uploaded file %s (%d bytes) as chunk %s with %d replicas",
+		filename, len(data), chunkHandle, len(successfulReplicas))
 
 	return &gfs.UploadFileResponse{
 		Success: true,
-		Message: "File uploaded successfully",
+		Message: fmt.Sprintf("File uploaded successfully with %d replicas", len(successfulReplicas)),
 	}, nil
 }
 
@@ -203,46 +196,47 @@ func (s *Server) DownloadFile(ctx context.Context, req *gfs.DownloadFileRequest)
 
 	chunkHandle := fileMeta.ChunkHandles[0]
 
-	// Get chunkserver client
-	chunkserverClient, err := s.getChunkserverClient()
-	if err != nil {
-		log.Printf("Failed to connect to chunkserver: %v", err)
+	// Get chunk locations
+	s.mu.RLock()
+	locations := s.chunkLocations[chunkHandle]
+	s.mu.RUnlock()
+
+	// Try to retrieve from any available replica
+	for _, chunkserverAddr := range locations {
+		chunkserverClient, err := s.getChunkserverClient(chunkserverAddr)
+		if err != nil {
+			log.Printf("Failed to connect to chunkserver %s: %v", chunkserverAddr, err)
+			continue
+		}
+
+		retrieveReq := &gfs.RetrieveChunkRequest{
+			ChunkHandle: chunkHandle,
+		}
+
+		resp, err := chunkserverClient.RetrieveChunk(ctx, retrieveReq)
+		if err != nil {
+			log.Printf("Failed to retrieve chunk %s from %s: %v", chunkHandle, chunkserverAddr, err)
+			continue
+		}
+
+		if !resp.GetSuccess() {
+			log.Printf("Chunkserver %s returned error for chunk %s: %s", chunkserverAddr, chunkHandle, resp.GetMessage())
+			continue
+		}
+
+		log.Printf("Downloaded file %s (%d bytes) from %s", filename, len(resp.GetData()), chunkserverAddr)
+
 		return &gfs.DownloadFileResponse{
-			Success: false,
-			Data:    nil,
-			Message: fmt.Sprintf("Failed to connect to chunkserver: %v", err),
+			Success: true,
+			Data:    resp.GetData(),
+			Message: "File downloaded successfully",
 		}, nil
 	}
-
-	// Retrieve chunk from chunkserver
-	retrieveReq := &gfs.RetrieveChunkRequest{
-		ChunkHandle: chunkHandle,
-	}
-
-	resp, err := chunkserverClient.RetrieveChunk(ctx, retrieveReq)
-	if err != nil {
-		log.Printf("Failed to retrieve chunk %s: %v", chunkHandle, err)
-		return &gfs.DownloadFileResponse{
-			Success: false,
-			Data:    nil,
-			Message: fmt.Sprintf("Failed to retrieve chunk: %v", err),
-		}, nil
-	}
-
-	if !resp.GetSuccess() {
-		return &gfs.DownloadFileResponse{
-			Success: false,
-			Data:    nil,
-			Message: resp.GetMessage(),
-		}, nil
-	}
-
-	log.Printf("Downloaded file %s (%d bytes)", filename, len(resp.GetData()))
 
 	return &gfs.DownloadFileResponse{
-		Success: true,
-		Data:    resp.GetData(),
-		Message: "File downloaded successfully",
+		Success: false,
+		Data:    nil,
+		Message: "Failed to retrieve chunk from any chunkserver",
 	}, nil
 }
 
@@ -256,7 +250,7 @@ func (s *Server) ListFiles(ctx context.Context, req *gfs.ListFilesRequest) (*gfs
 	var files []string
 	for filename := range s.fileMetadata {
 		// Simple prefix matching for now
-		if path == "" || filename[:len(path)] == path {
+		if path == "" || len(filename) >= len(path) && filename[:len(path)] == path {
 			files = append(files, filename)
 		}
 	}
@@ -283,25 +277,25 @@ func (s *Server) DeleteFile(ctx context.Context, req *gfs.DeleteFileRequest) (*g
 		}, nil
 	}
 
-	// Get chunkserver client
-	chunkserverClient, err := s.getChunkserverClient()
-	if err != nil {
-		log.Printf("Failed to connect to chunkserver: %v", err)
-		return &gfs.DeleteFileResponse{
-			Success: false,
-			Message: fmt.Sprintf("Failed to connect to chunkserver: %v", err),
-		}, nil
-	}
-
-	// Delete chunks from chunkserver
+	// Delete chunks from all replicas
 	for _, chunkHandle := range fileMeta.ChunkHandles {
-		deleteReq := &gfs.DeleteChunkRequest{
-			ChunkHandle: chunkHandle,
-		}
+		locations := s.chunkLocations[chunkHandle]
 
-		_, err := chunkserverClient.DeleteChunk(ctx, deleteReq)
-		if err != nil {
-			log.Printf("Failed to delete chunk %s: %v", chunkHandle, err)
+		for _, chunkserverAddr := range locations {
+			chunkserverClient, err := s.getChunkserverClient(chunkserverAddr)
+			if err != nil {
+				log.Printf("Failed to connect to chunkserver %s: %v", chunkserverAddr, err)
+				continue
+			}
+
+			deleteReq := &gfs.DeleteChunkRequest{
+				ChunkHandle: chunkHandle,
+			}
+
+			_, err = chunkserverClient.DeleteChunk(ctx, deleteReq)
+			if err != nil {
+				log.Printf("Failed to delete chunk %s from %s: %v", chunkHandle, chunkserverAddr, err)
+			}
 		}
 
 		// Remove from chunk locations
