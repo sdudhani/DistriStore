@@ -107,14 +107,14 @@ func (s *Server) UploadFile(ctx context.Context, req *gfs.UploadFileRequest) (*g
 	filename := req.GetFilename()
 	data := req.GetData()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	// Generate a chunk handle for this file
 	chunkHandle := fmt.Sprintf("%s-0", filename)
 
-	// Get available chunkservers
+	// Get available chunkservers (needs to be called before acquiring lock to avoid deadlock)
 	availableChunkservers := s.getAvailableChunkservers()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	// Check if we have any chunkservers available
 	if len(availableChunkservers) == 0 {
