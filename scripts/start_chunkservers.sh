@@ -1,9 +1,9 @@
 # Starting 3 chunk servers on different ports
 echo "Starting chunkservers..."
 
-go run ./cmd/chunkserver --port=9001 --data-dir=./chunkserver_data_1 & CHUNKSERVER1_PID=$!
-go run ./cmd/chunkserver --port=9002 --data-dir=./chunkserver_data_2 & CHUNKSERVER2_PID=$!
-go run ./cmd/chunkserver --port=9003 --data-dir=./chunkserver_data_3 & CHUNKSERVER2_PID=$!
+go run ./cmd/chunkserver --port=9001 --data-dir=./chunkserver_data_1 --master=localhost:9000 & CHUNKSERVER1_PID=$!
+go run ./cmd/chunkserver --port=9002 --data-dir=./chunkserver_data_2 --master=localhost:9000 & CHUNKSERVER2_PID=$!
+go run ./cmd/chunkserver --port=9003 --data-dir=./chunkserver_data_3 --master=localhost:9000 & CHUNKSERVER3_PID=$!
 
 echo "Chunkservers started:"
 echo "  Chunkserver 1: PID $CHUNKSERVER1_PID (port 9001)"
@@ -16,4 +16,4 @@ wait
 
 # Cleanup on exit
 echo "Stopping chunkservers..."
-kill $CHUNKSERVER1_PID $CHUNKSERVER2_PID
+kill $CHUNKSERVER1_PID $CHUNKSERVER2_PID $CHUNKSERVER3_PID

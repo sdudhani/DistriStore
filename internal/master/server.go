@@ -39,16 +39,24 @@ type Server struct {
 
 // NewServer creates a new master server
 func NewServer() *Server {
-	return &Server{
+	server := &Server{
 		fileMetadata:   make(map[string]*FileMetadata),
 		chunkLocations: make(map[string][]string),
 		chunkservers:   make(map[string]*ChunkserverInfo),
 	}
+
+	// Start health monitoring
+	go server.monitorChunkserverHealth()
+
+	return server
 }
 
 // getChunkserverClient creates a connection to the chunkserver
 func (s *Server) getChunkserverClient(address string) (gfs.ChunkserverClient, error) {
-	conn, err := grpc.Dial(address, grpc.WithInsecure())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	conn, err := grpc.DialContext(ctx, address, grpc.WithInsecure()) // TODO: Replace with secure connection in production
 	if err != nil {
 		return nil, err
 	}
@@ -82,15 +90,13 @@ func (s *Server) getAvailableChunkservers() []string {
 	defer s.mu.RUnlock()
 
 	var available []string
+	now := time.Now().Unix()
+
 	for address, info := range s.chunkservers {
-		if info.IsHealthy {
+		// Check if chunkserver is healthy and recently seen (within 30 seconds)
+		if info.IsHealthy && (now-info.LastSeen) < 30 {
 			available = append(available, address)
 		}
-	}
-
-	// If no chunkservers are registered, use default ones
-	if len(available) == 0 {
-		available = []string{"localhost:9001", "localhost:9002", "localhost:9003"}
 	}
 
 	return available
@@ -109,6 +115,14 @@ func (s *Server) UploadFile(ctx context.Context, req *gfs.UploadFileRequest) (*g
 
 	// Get available chunkservers
 	availableChunkservers := s.getAvailableChunkservers()
+
+	// Check if we have any chunkservers available
+	if len(availableChunkservers) == 0 {
+		return &gfs.UploadFileResponse{
+			Success: false,
+			Message: "No chunkservers available",
+		}, nil
+	}
 
 	// Replicate chunk to multiple chunkservers (3 replicas)
 	replicaCount := 3
@@ -343,4 +357,134 @@ func (s *Server) GetChunkLocations(ctx context.Context, req *gfs.GetChunkLocatio
 		ChunkserverAddresses: locations,
 		ChunkHandle:          chunkHandle,
 	}, nil
+}
+
+// monitorChunkserverHealth monitors chunkserver health and handles re-replication
+func (s *Server) monitorChunkserverHealth() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		s.checkAndHandleFailedChunkservers()
+	}
+}
+
+// checkAndHandleFailedChunkservers checks for failed chunkservers and handles re-replication
+func (s *Server) checkAndHandleFailedChunkservers() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now().Unix()
+	var failedChunkservers []string
+
+	// Identify failed chunkservers (no heartbeat for 60 seconds)
+	for address, info := range s.chunkservers {
+		if (now - info.LastSeen) > 60 {
+			info.IsHealthy = false
+			failedChunkservers = append(failedChunkservers, address)
+			log.Printf("Chunkserver %s marked as failed (last seen: %d seconds ago)", address, now-info.LastSeen)
+		}
+	}
+
+	// Handle re-replication for chunks on failed chunkservers
+	for _, failedAddr := range failedChunkservers {
+		s.handleChunkserverFailure(failedAddr)
+	}
+}
+
+// handleChunkserverFailure handles re-replication when a chunkserver fails
+func (s *Server) handleChunkserverFailure(failedAddr string) {
+	log.Printf("Handling failure of chunkserver %s", failedAddr)
+
+	// Find chunks that were stored on the failed chunkserver
+	for chunkHandle, locations := range s.chunkLocations {
+		// Check if this chunk was stored on the failed chunkserver
+		hasFailedReplica := false
+		for _, addr := range locations {
+			if addr == failedAddr {
+				hasFailedReplica = true
+				break
+			}
+		}
+
+		if hasFailedReplica {
+			// Remove failed chunkserver from locations
+			var newLocations []string
+			for _, addr := range locations {
+				if addr != failedAddr {
+					newLocations = append(newLocations, addr)
+				}
+			}
+			s.chunkLocations[chunkHandle] = newLocations
+
+			// Try to re-replicate if we have at least one good replica
+			if len(newLocations) > 0 {
+				s.replicateChunk(chunkHandle, newLocations[0])
+			}
+		}
+	}
+}
+
+// replicateChunk replicates a chunk from a source chunkserver to available chunkservers
+func (s *Server) replicateChunk(chunkHandle, sourceAddr string) {
+	// Get available chunkservers (excluding the source)
+	availableChunkservers := s.getAvailableChunkservers()
+	var targetChunkservers []string
+
+	for _, addr := range availableChunkservers {
+		if addr != sourceAddr {
+			targetChunkservers = append(targetChunkservers, addr)
+		}
+	}
+
+	if len(targetChunkservers) == 0 {
+		log.Printf("No available chunkservers for re-replication of chunk %s", chunkHandle)
+		return
+	}
+
+	// Get the chunk data from the source
+	sourceClient, err := s.getChunkserverClient(sourceAddr)
+	if err != nil {
+		log.Printf("Failed to connect to source chunkserver %s: %v", sourceAddr, err)
+		return
+	}
+
+	ctx := context.Background()
+	retrieveReq := &gfs.RetrieveChunkRequest{ChunkHandle: chunkHandle}
+	resp, err := sourceClient.RetrieveChunk(ctx, retrieveReq)
+	if err != nil || !resp.GetSuccess() {
+		log.Printf("Failed to retrieve chunk %s from source %s: %v", chunkHandle, sourceAddr, err)
+		return
+	}
+
+	// Replicate to target chunkservers
+	var successfulReplicas []string
+	for _, targetAddr := range targetChunkservers {
+		targetClient, err := s.getChunkserverClient(targetAddr)
+		if err != nil {
+			log.Printf("Failed to connect to target chunkserver %s: %v", targetAddr, err)
+			continue
+		}
+
+		storeReq := &gfs.StoreChunkRequest{
+			ChunkHandle: chunkHandle,
+			Data:        resp.GetData(),
+		}
+
+		_, err = targetClient.StoreChunk(ctx, storeReq)
+		if err != nil {
+			log.Printf("Failed to store chunk %s on target %s: %v", chunkHandle, targetAddr, err)
+			continue
+		}
+
+		successfulReplicas = append(successfulReplicas, targetAddr)
+		log.Printf("Re-replicated chunk %s to %s", chunkHandle, targetAddr)
+	}
+
+	// Update chunk locations
+	if len(successfulReplicas) > 0 {
+		s.mu.Lock()
+		s.chunkLocations[chunkHandle] = append(s.chunkLocations[chunkHandle], successfulReplicas...)
+		s.mu.Unlock()
+	}
 }
