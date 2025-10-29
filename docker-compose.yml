@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  master:
+    build: .
+    command: go run ./cmd/master/main.go
+    ports:
+      - "9000:9000"
+    networks:
+      - godfs-network
+
+  chunkserver1:
+    build: .
+    command: go run ./cmd/chunkserver/main.go --port=9001 --data-dir=./chunkserver_data_1 --master=master:9000
+    ports:
+      - "9001:9001"
+    volumes:
+      - chunkserver1_data:/app/chunkserver_data_1
+    depends_on:
+      - master
+    networks:
+      - godfs-network
+
+  chunkserver2:
+    build: .
+    command: go run ./cmd/chunkserver/main.go --port=9002 --data-dir=./chunkserver_data_2 --master=master:9000
+    ports:
+      - "9002:9002"
+    volumes:
+      - chunkserver2_data:/app/chunkserver_data_2
+    depends_on:
+      - master
+    networks:
+      - godfs-network
+
+  chunkserver3:
+    build: .
+    command: go run ./cmd/chunkserver/main.go --port=9003 --data-dir=./chunkserver_data_3 --master=master:9000
+    ports:
+      - "9003:9003"
+    volumes:
+      - chunkserver3_data:/app/chunkserver_data_3
+    depends_on:
+      - master
+    networks:
+      - godfs-network
+
+  web:
+    build: .
+    command: go run ./cmd/web/main.go
+    ports:
+      - "8080:8080"
+    environment:
+      - MASTER_ADDR=master:9000
+    depends_on:
+      - master
+      - chunkserver1
+      - chunkserver2
+      - chunkserver3
+    networks:
+      - godfs-network
+
+volumes:
+  chunkserver1_data:
+  chunkserver2_data:
+  chunkserver3_data:
+
+networks:
+  godfs-network:
+    driver: bridge
