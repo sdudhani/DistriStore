@@ -3,15 +3,40 @@
 echo "🚀 Starting GoDFS Distributed File System"
 echo "=========================================="
 
-# Kill any existing processes on our ports
+# Kill any existing processes on our ports (graceful then force), and wait until free
 echo "🧹 Cleaning up existing processes..."
-lsof -ti :9000 | xargs kill -9 2>/dev/null || true
-lsof -ti :9001 | xargs kill -9 2>/dev/null || true
-lsof -ti :9002 | xargs kill -9 2>/dev/null || true
-lsof -ti :9003 | xargs kill -9 2>/dev/null || true
-lsof -ti :8080 | xargs kill -9 2>/dev/null || true
+free_port() {
+  local port="$1"
+  local pids
+  pids=$(lsof -ti :"$port" 2>/dev/null || true)
+  if [ -n "$pids" ]; then
+    echo "  • Port $port in use by PIDs: $pids — sending SIGTERM"
+    kill $pids 2>/dev/null || true
+    # wait up to 3s for clean exit
+    for i in 1 2 3; do
+      sleep 1
+      pids=$(lsof -ti :"$port" 2>/dev/null || true)
+      [ -z "$pids" ] && break
+    done
+    # force kill if still present
+    pids=$(lsof -ti :"$port" 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+      echo "    - Forcing kill on PIDs: $pids"
+      kill -9 $pids 2>/dev/null || true
+    fi
+  fi
+  # final wait until port is free (up to 3s)
+  for i in 1 2 3; do
+    lsof -ti :"$port" >/dev/null 2>&1 || return 0
+    sleep 1
+  done
+}
 
-sleep 2
+for p in 9000 9001 9002 9003 8080; do
+  free_port "$p"
+done
+
+sleep 1
 
 # Create data directories
 echo "📁 Creating data directories..."
