@@ -234,5 +234,3 @@ godfs/
 - Add web-based management interface
 
 ---
-
-**GoDFS** - A distributed file system built with Go and gRPC 
