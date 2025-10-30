@@ -5,13 +5,13 @@ A distributed file system implementation in Go, inspired by the Google File Syst
 
 ## Features
 
-- ** Web Interface**: Beautiful, modern web UI for file upload/download
-- ** Automatic Replication**: Files replicated across 3 chunkservers for fault tolerance
-- ** Distributed Storage**: Files stored across multiple chunkservers
-- ** Health Monitoring**: Real-time chunkserver health monitoring
-- ** gRPC Communication**: High-performance RPC communication
-- ** One-Command Setup**: Start everything with a single script
-- ** Replication Visualization**: See replication status in real-time
+- **Web Interface**: Beautiful, modern web UI for file upload/download
+- **Automatic Replication**: Files replicated across 3 chunkservers for fault tolerance
+- **Distributed Storage**: Files stored across multiple chunkservers
+- **Health Monitoring**: Real-time chunkserver health monitoring
+- **gRPC Communication**: High-performance RPC communication
+- **One-Command Setup**: Start everything with a single script
+- **Replication Visualization**: See replication status in real-time
 
 ## Architecture
 
