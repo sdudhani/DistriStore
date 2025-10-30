@@ -9,7 +9,7 @@ A distributed file system implementation in Go, inspired by Google File System (
 - **💾 Distributed Storage**: Files stored across multiple chunkservers
 - **❤️ Health Monitoring**: Real-time chunkserver health monitoring
 - **⚡ gRPC Communication**: High-performance RPC communication
-- **🐳 Docker Support**: Easy deployment with Docker Compose
+- **🚀 One-Command Setup**: Start everything with a single script
 - **📊 Replication Visualization**: See replication status in real-time
 
 ## Architecture
@@ -29,7 +29,7 @@ A distributed file system implementation in Go, inspired by Google File System (
 
 ## 🚀 Quick Start
 
-### Option 1: One-Command Start (Recommended)
+### One-Command Start (Recommended)
 
 ```bash
 # Clone the repository
@@ -42,20 +42,14 @@ cd godfs
 
 Then open **http://localhost:8080** in your browser! 🎉
 
-### Option 2: Docker Compose (Easiest)
+What you can do:
+- Upload a file from the web UI
+- See each file's replication count
+- Download any file to verify contents
 
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/godfs.git
-cd godfs
+### Manual Start (Alternative)
 
-# Start with Docker
-./start-docker.sh
-```
-
-Then open **http://localhost:8080** in your browser! 🎉
-
-### Option 3: Manual Start
+If you prefer to start services individually:
 
 ```bash
 # Terminal 1: Start Master Server
@@ -81,26 +75,41 @@ Then open **http://localhost:8080** in your browser! 🎉
 The GoDFS web interface provides a modern, user-friendly experience:
 
 ### 📤 File Upload
-- **Drag & Drop**: Easy file upload with modern UI
-- **Automatic Replication**: Files automatically replicated across 3 chunkservers
-- **Real-time Status**: See upload progress and replication status
-- **File Validation**: Built-in file type and size validation
+- Upload any file from your machine
+- Automatic replication across up to 3 chunkservers
+- Status and replica count shown in the list
 
 ### 📥 File Download
-- **One-Click Download**: Download files with a single click
-- **Automatic Failover**: Downloads from healthy chunkservers automatically
-- **Progress Indicators**: Visual feedback during download
+- One-click download from the list
+- Automatic failover if a chunkserver is down
 
 ### 📊 System Dashboard
-- **Live Status**: Real-time chunkserver health monitoring
-- **Replication View**: See which files are replicated where
-- **File Management**: List, view, and manage all uploaded files
-- **Health Metrics**: Monitor system performance and availability
+- Master address display
+- Chunkserver health (basic view)
 
 ### 🔄 Replication Visualization
-- **Replication Factor**: See how many copies of each file exist
-- **Chunkserver Status**: Monitor health of all chunkservers
-- **Fault Tolerance**: Visual indicators of system resilience
+- Replication factor shown per file
+
+## 🔎 Verify Replication
+
+From the Web UI:
+- Upload a file
+- Refresh the page; you should see "3 replicas" if three chunkservers are running
+
+From CLI (optional):
+```bash
+go run ./test_client.go
+# or use the master RPC directly in code via GetChunkLocations
+```
+
+## 📂 Where Files Are Stored
+
+Each chunkserver writes file chunks to a data directory under your home directory:
+- macOS/Linux: `~/.godfs/<data-dir>/<filename>-0`
+- Example if you started with `--data-dir=./chunkserver_data_1`:
+  - `/Users/<you>/.godfs/chunkserver_data_1/myfile.txt-0`
+
+You should see identical chunk files across multiple chunkserver data dirs when replication succeeds.
 
 ## Example Usage
 
@@ -139,10 +148,12 @@ Enter file content: This is my important document!
 - Sends periodic heartbeats
 - Handles chunk operations (store/retrieve/delete)
 
-### Client (`cmd/client/main.go`)
-- Interactive file operations
-- User-friendly interface
-- System status monitoring
+### Web (`cmd/web/main.go`)
+- Simple HTTP UI for upload/download
+- Shows basic health info and replication counts
+
+### Client (`cmd/client/main.go`) (optional)
+- Interactive CLI to test RPCs
 
 ## Configuration
 
@@ -155,6 +166,17 @@ Enter file content: This is my important document!
 - **Port**: 9001, 9002, 9003 (configurable)
 - **Data directory**: `./chunkserver_data_N`
 - **Heartbeat interval**: 10 seconds
+
+## Troubleshooting
+
+Ports already in use (8080, 9000–9003):
+```bash
+kill -9 $(lsof -ti :8080 :9000 :9001 :9002 :9003) 2>/dev/null || true
+```
+
+Master can't find chunkservers:
+- Wait ~10s for heartbeats to register
+- Ensure you started three chunkservers (or reduce replication expectations)
 
 ## Testing
 
@@ -178,7 +200,8 @@ godfs/
 ├── cmd/
 │   ├── master/main.go          # Master server
 │   ├── chunkserver/main.go     # Chunkserver
-│   └── client/main.go          # Interactive client
+│   ├── web/main.go             # Web interface
+│   └── client/main.go          # Interactive client (optional)
 ├── internal/
 │   ├── master/server.go        # Master server logic
 │   └── chunkserver/server.go   # Chunkserver logic
@@ -186,8 +209,9 @@ godfs/
 │   ├── gfs.proto              # Protocol definitions
 │   ├── gfs.pb.go              # Generated protobuf
 │   └── gfs_grpc.pb.go         # Generated gRPC
+├── start.sh                   # One-command startup for all services
 ├── scripts/
-│   └── start_chunkservers.sh  # Startup script
+│   └── start_chunkservers.sh  # Start chunkservers manually
 └── README.md                  # This file
 ```
 
