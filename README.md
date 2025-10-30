@@ -1,16 +1,17 @@
-# 🚀 GoDFS - Distributed File System
+# DistriStore - Distributed File System
 
-A distributed file system implementation in Go, inspired by Google File System (GFS). Features automatic replication, fault tolerance, and a beautiful web interface for easy file management.
+A distributed file system implementation in Go, inspired by the Google File System (GFS). Features automatic replication, fault tolerance, and a web interface for easy file management.
 
-## ✨ Features
 
-- **🌐 Web Interface**: Beautiful, modern web UI for file upload/download
-- **🔄 Automatic Replication**: Files replicated across 3 chunkservers for fault tolerance
-- **💾 Distributed Storage**: Files stored across multiple chunkservers
-- **❤️ Health Monitoring**: Real-time chunkserver health monitoring
-- **⚡ gRPC Communication**: High-performance RPC communication
-- **🚀 One-Command Setup**: Start everything with a single script
-- **📊 Replication Visualization**: See replication status in real-time
+## Features
+
+- ** Web Interface**: Beautiful, modern web UI for file upload/download
+- ** Automatic Replication**: Files replicated across 3 chunkservers for fault tolerance
+- ** Distributed Storage**: Files stored across multiple chunkservers
+- ** Health Monitoring**: Real-time chunkserver health monitoring
+- ** gRPC Communication**: High-performance RPC communication
+- ** One-Command Setup**: Start everything with a single script
+- ** Replication Visualization**: See replication status in real-time
 
 ## Architecture
 
@@ -27,9 +28,9 @@ A distributed file system implementation in Go, inspired by Google File System (
                    └─────────────┘
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
-### One-Command Start (Recommended)
+### One-Command Start 
 
 ```bash
 # Clone the repository
@@ -40,7 +41,7 @@ cd godfs
 ./start.sh
 ```
 
-Then open **http://localhost:8080** in your browser! 🎉
+Then open **http://localhost:8080** in your browser! 
 
 What you can do:
 - Upload a file from the web UI
@@ -68,29 +69,29 @@ go run ./cmd/chunkserver/main.go --port=9003 --data-dir=./chunkserver_data_3 --m
 go run ./cmd/web/main.go
 ```
 
-Then open **http://localhost:8080** in your browser! 🎉
+Then open **http://localhost:8080** in your browser! 
 
-## 🌐 Web Interface Features
+##  Web Interface Features
 
-The GoDFS web interface provides a modern, user-friendly experience:
+The GoDFS web interface provides a all the essential features as: 
 
-### 📤 File Upload
+### File Upload
 - Upload any file from your machine
 - Automatic replication across up to 3 chunkservers
 - Status and replica count shown in the list
 
-### 📥 File Download
+### File Download
 - One-click download from the list
 - Automatic failover if a chunkserver is down
 
-### 📊 System Dashboard
+### System Dashboard
 - Master address display
 - Chunkserver health (basic view)
 
-### 🔄 Replication Visualization
+### Replication Visualization
 - Replication factor shown per file
 
-## 🔎 Verify Replication
+## Verify Replication
 
 From the Web UI:
 - Upload a file
@@ -102,7 +103,7 @@ go run ./test_client.go
 # or use the master RPC directly in code via GetChunkLocations
 ```
 
-## 📂 Where Files Are Stored
+##  Where Files Are Stored
 
 Each chunkserver writes file chunks to a data directory under your home directory:
 - macOS/Linux: `~/.godfs/<data-dir>/<filename>-0`
@@ -114,7 +115,7 @@ You should see identical chunk files across multiple chunkserver data dirs when 
 ## Example Usage
 
 ```
-🚀 GoDFS Client
+ GoDFS Client
 ===============
 A Distributed File System Client
 
@@ -234,4 +235,4 @@ godfs/
 
 ---
 
-**GoDFS** - A distributed file system built with Go and gRPC 🚀
+**GoDFS** - A distributed file system built with Go and gRPC 
