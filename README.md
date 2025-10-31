@@ -70,7 +70,7 @@ go run ./cmd/web/main.go
 
 Then open **http://localhost:8080** in your browser! 
 
-![Alt text](./screenshot.jpg)
+![Alt text](./screenshot.png)
 
 ##  Web Interface Features
 
