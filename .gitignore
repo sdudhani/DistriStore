@@ -37,6 +37,5 @@ chunkserver_data/
 chunkserver_data_*
 
 # Project assets not intended for git
-screenshot.png
 
 
