@@ -1,0 +1,42 @@
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/
+.cache/
+
+# Env / Secrets
+.env
+.env.*
+
+# Logs / Temp
+logs/
+*.log
+tmp/
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage/
+coverage.*
+
+# Local binaries (if built)
+/godfs
+/chunkserver
+/web
+bin/
+build/
+dist/
+
+# Local data directories created by scripts
+chunkserver_data/
+chunkserver_data_*
+
+# Project assets not intended for git
+screenshot.png
+
+

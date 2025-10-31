@@ -1,11 +1,10 @@
 # DistriStore - Distributed File System
 
-A distributed file system implementation in Go, inspired by the Google File System (GFS). Features automatic replication, fault tolerance, and a web interface for easy file management.
-
+A distributed file system implementation in Go, inspired by the Google File System (GFS). Uploaded files are automatically replicated. Fault tolerance implemented and no single point of failure. A simple intuitive web interface for easy file management.
 
 ## Features
 
-- **Web Interface**: Beautiful, modern web UI for file upload/download
+- **Web Interface**: Simple web UI for file upload/download
 - **Automatic Replication**: Files replicated across 3 chunkservers for fault tolerance
 - **Distributed Storage**: Files stored across multiple chunkservers
 - **Health Monitoring**: Real-time chunkserver health monitoring
@@ -70,6 +69,9 @@ go run ./cmd/web/main.go
 ```
 
 Then open **http://localhost:8080** in your browser! 
+
+![DistriStore Web UI](./screenshot.png)
+
 
 ##  Web Interface Features
 
