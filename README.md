@@ -70,8 +70,7 @@ go run ./cmd/web/main.go
 
 Then open **http://localhost:8080** in your browser! 
 
-![DistriStore Web UI](./screenshot.png)
-
+![Alt text](./screenshot.jpg)
 
 ##  Web Interface Features
 
